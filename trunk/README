@@ -1,0 +1,8 @@
+MediaRepo
+=========
+
+MediaRepo is a set of ruby scripts that enable you do build a database
+for game content such as blender 3d models, Gimp images or sound
+files.
+
+# EOF #
