@@ -36,6 +36,8 @@ module MediaRepo
         @entry.author = @text
       when "license"
         @entry.license = @text
+      when "override"
+        @entry.override = @text
       when "filetype"
         @entry.filetype = @text
       when "filename"
@@ -72,7 +74,7 @@ module MediaRepo
     attr_accessor(:version, :ctime, :md5, :filesize,
                   :name, :description, :keywords, :categories,
                   :author, :license, :filetype, :filename, :pathname,
-                  :next_versions, :prev_versions,
+                  :next_versions, :prev_versions, :override,
                   :relateds, :parents)
 
     def XMLEntry.create_from_file(repopath, filename, nosave = false)
@@ -149,6 +151,7 @@ module MediaRepo
       @filesize    = 0
       @next_versions = []
       @prev_versions = []
+      @override    = ""
       @name        = "" # Human readable name of the object
       @description = "" # Human readable description of the object
       @author      = ""
@@ -422,6 +425,7 @@ end
       entry.add_element("pathname").text    = @pathname
       entry.add_element("filename").text    = @filename
       entry.add_element("filetype").text    = @filetype
+      entry.add_element("override").text    = @override
     
       prev_versions.each { |i|
         entry.add_element("prev-version").text = i

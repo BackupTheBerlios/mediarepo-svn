@@ -4,6 +4,7 @@ require "set"
 require "xmlentry.rb"
 require "log.rb"
 require "xmlcomment.rb"
+require "open3"
 
 module MediaRepo
 
@@ -102,13 +103,57 @@ module MediaRepo
       end
     end
     
-    def get(md5)
+    def search(searchexpr)
+      STDOUT.flush
+
+      # evaluate searchexpr and return all the results ordered by
+      # there rank, best match comes first
+      fin, fout, ferr = Open3.popen3("swish-search", # FIXME: hardcoded path
+                                     "-f", "dbindex",
+                                     "-c", "swish-e.cfg",
+                                     "-x", "%r %p\n",
+                                     "-w", searchexpr)
+      
+      results = []
+      fout.each_line { |line|
+        if line.empty? or line[0] == ?. or line[0] == ?# then
+          # do nothing
+        elsif line =~ /^err:/ then
+          # FIXME: how to seperate no results from incorrect search term?
+        else
+          rank, md5 = line.split
+          if md5 and is_md5(md5) then
+            results.push(md5)
+          else
+            # line syntax wrong?
+          end
+        end
+      }
+      
+      fin.close()
+      fout.close()
+      ferr.close()
+
+      return results
+    end
+    
+    def get(md5, follow_link = true, link_count = 0)
       if not is_md5(md5) then
         return nil 
       else
         entrypath = @path + "/" + md5
         if File.exist?(entrypath + "/data.dat") then   
-          return XMLEntry.new(@path, md5)
+          entry = XMLEntry.new(@path, md5)
+          if follow_link and (not entry.override.empty?) and link_count < 20 then
+            override = get(entry.override, true, link_count + 1)
+            if override then 
+              return override
+            else # Override lead into void
+              return entry
+            end
+          else
+            return entry
+          end
         else
           return nil
         end

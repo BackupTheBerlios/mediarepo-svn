@@ -323,7 +323,14 @@ def check_cmd(*rest)
   puts "Validation done, %s errors" % errors
 end
 
-def search_cmd(prop, *regexs)
+def search_cmd(searchexpr)
+  results = $repository.search(searchexpr)
+  results.each { |i|
+    puts i
+  }
+end
+
+def search2_cmd(prop, *regexs)
   regexs.each { |regex|
     re = Regexp.new(regex)
     
@@ -505,6 +512,8 @@ else
     gen_renders_cmd(*rest)
   when "search"
     search_cmd(*rest)
+  when "search2"
+    search2_cmd(*rest)
   when "makerelated"
     make_related_cmd(*rest)
   when "clean"

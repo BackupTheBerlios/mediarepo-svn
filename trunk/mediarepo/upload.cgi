@@ -92,6 +92,14 @@ begin
       if entry.filetype.empty? then
         entry.filetype = File.extname(filename).gsub(".", "")
       end
+
+      if cgi.has_key?("md5") then
+        oldentry = repository.get(md5)
+        if oldentry then
+          oldentry.override = entry.md5
+          oldentry.save()
+        end
+      end
     end
     
     if not entry then

@@ -28,12 +28,72 @@ $categories = \
  "abstract", "metallic", "water", "rust", "wood", "glass", "realistic", 
  "highpoly", "lowpoly" ]
 
+# FIXME: hack
+oldpath = ENV["PATH"]
+ENV["PATH"] = oldpath + ":/home/grumbel/bin/"
+
 def make_links(str)
   return str.gsub(/(https?:\/\/[^ <>]+)/, '<a href="\1">\1</a>')
 end
 
+def render_entries(entries, col, per_page, page_num)
+  puts "<table align=\"center\">"
+  count = 0
+  puts "<tr>"
+
+  entries.slice(page_num * per_page, per_page).each {|entry|
+    if count >= col then
+      count = 0
+      puts "</tr>"
+      puts "<tr>"
+    end
+    
+    puts "<td>"
+    if entry then
+      entry.render_html()
+    else
+      puts "<a href=\"download.cgi?md5=#{md5}\"><img src=\"images/404render.png\"></a>"
+    end
+    puts "</td>"
+    
+    count += 1
+  }
+
+  puts "</tr>"
+  puts "</table>"
+end
+
+def render_page_line(total, per_page, page_num)
+  if total > per_page then
+    puts "<p align=\"center\">[ "
+    ((total / per_page)+1).times { |i|
+      if i == page_num then
+        puts " #{i} "
+      else
+        puts " <a href=\"#{yield(i)}\">#{i}</a> "
+    end
+    }
+    puts " ]</p>"
+  end
+end
+
+def search_results_page(searchexpr, per_page = 30, page_num = 0)
+  results = $repository.search(searchexpr)
+  if results.empty? then
+    puts "<p>No items found matching '#{searchexpr}'</p>"
+  else
+    render_page_line(results.size, per_page, page_num) { |i|
+      "show.cgi?search=#{CGI.escape(searchexpr)}&per_page=#{per_page}&page_num=#{i}"
+    }
+    render_entries(results.map {|i| $repository.get(i)}, 6, per_page, page_num)
+    render_page_line(results.size, per_page, page_num) { |i|
+      "show.cgi?search=#{CGI.escape(searchexpr)}&per_page=#{per_page}&page_num=#{i}"
+    }
+  end
+end
+
 def entry_page(md5, show_edit)
-  entry = $repository.get(md5)
+  entry = $repository.get(md5, (not $cgi.has_key?("nofollow")))
   
   if entry == nil then
     puts "<p><b>Error:</b> Entry #{md5} not in the database.</p>"
@@ -395,20 +455,33 @@ def overview_page(count, offset)
   puts "<center>#{count_line}</center>"
 end
 
-cgi = CGI.new()
+$cgi = CGI.new()
 
 $repository = Repository.new("testrepo")
 
-print cgi.header("text/html")
+print $cgi.header("text/html")
 print File.new("header.html").read()
 
 begin
-  if cgi.has_key?("md5") then
-    entry_page(cgi["md5"], cgi.has_key?("edit"))
-  elsif cgi.has_key?("submit") then
+  if $cgi.has_key?("md5") then
+    entry_page($cgi["md5"], $cgi.has_key?("edit"))
+  elsif $cgi.has_key?("submit") then
     submit_page()
-  elsif cgi.has_key?("offset") and cgi.has_key?("count") then
-    overview_page(cgi["count"].to_i, cgi["offset"].to_i)
+  elsif $cgi.has_key?("search") then
+    if $cgi.has_key?("per_page") then
+      per_page = $cgi["per_page"].to_i
+    else
+      per_page = 30
+    end
+
+    if $cgi.has_key?("page_num") then
+      page_num = $cgi["page_num"].to_i
+    else
+      page_num = 0
+    end
+    search_results_page($cgi["search"].to_s, per_page, page_num)
+  elsif $cgi.has_key?("offset") and $cgi.has_key?("count") then
+    overview_page($cgi["count"].to_i, $cgi["offset"].to_i)
   else
     print File.new("start.html").read()
   end
