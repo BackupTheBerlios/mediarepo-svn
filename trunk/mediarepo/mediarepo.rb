@@ -11,6 +11,10 @@ module MediaRepo
     return (md5.size == 32) && ((/[^0123456789abcdef]/ =~ md5) == nil)
   end
 
+  def filename2md5(file)
+    return Digest::MD5.hexdigest(File.new(file).read())
+  end
+
   class Repository
     attr_reader :path
 

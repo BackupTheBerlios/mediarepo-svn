@@ -28,6 +28,9 @@ $categories = \
  "abstract", "metallic", "water", "rust", "wood", "glass", "realistic", 
  "highpoly", "lowpoly" ]
 
+def make_links(str)
+  return str.gsub(/(https?:\/\/[^ <>]+)/, '<a href="\1">\1</a>')
+end
 
 def entry_page(md5, show_edit)
   entry = $repository.get(md5)
@@ -40,9 +43,9 @@ def entry_page(md5, show_edit)
     puts "[<a href=\"show.cgi\">back</a>]<br><br>"
 
     puts "<table><tr>"
-    puts "<td valign=\"top\" align=\"center\">"
     
     if (entry.filetype == "directory") then
+    puts "<td valign=\"top\" align=\"center\">"
       puts "<table><tr>"
       column = 0
       entry.data.each { |md5|
@@ -62,7 +65,13 @@ def entry_page(md5, show_edit)
         end
       }
       puts "</tr></table>"
+    puts "<br></td>"
+    elsif (entry.filetype == "txt") then
+      puts "<td>"
+      puts "<pre>#{CGI.escapeHTML(entry.data)}</pre>"
+      puts "</td>"
     else
+    puts "<td valign=\"top\" align=\"center\">"
       if entry.renders.empty? then
         puts "<a href=\"download.cgi?md5=#{md5}\"><img src=\"images/404render.png\"></a><br>"
       else
@@ -70,37 +79,65 @@ def entry_page(md5, show_edit)
           puts "<a href=\"download.cgi?md5=#{md5}\"><img src=\"#{entry.path}/renders/#{render}\"></a><br>"
         }
       end
+    puts "<br></td>"
     end
-    puts "<br>"
-    puts "</td>"
     puts "<td valign=\"top\">"
     
     puts "<h3>#{entry.print_name}</h3>"  
     puts "<b>Filename:</b> <a href=\"download.cgi?md5=#{md5}\">#{entry.filename}</a><br>"
+    puts "<b>Pathname:</b> #{File.dirname(entry.pathname)}<br>"
     puts "<b>MD5:</b>      #{entry.md5}<br>"
-    puts "<b>License:</b>  unknown<br>"
+    if is_md5(entry.license) and (el = $repository.get(entry.license)) then
+      puts "<b>License:</b>  <a href=\"show.cgi?md5=#{entry.license}\">see #{el.name}</a><br>"
+    else
+      puts "<b>License:</b>  #{entry.license}<br>"
+    end
     puts "<b>Type:</b>     #{entry.filetype}<br>"
-    puts "<b>Author:</b>   #{CGI.escapeHTML(entry.author)}<br>"
+
+    if is_md5(entry.author) and (el = $repository.get(entry.author)) then
+      puts "<b>License:</b>  <a href=\"show.cgi?md5=#{entry.author}\">see #{el.name}</a><br>"
+    else
+      puts "<b>Author:</b>   #{CGI.escapeHTML(entry.author)}<br>"
+    end
+
     puts "<b>Creation:</b> #{Time.at(entry.ctime).to_s}<br>"
     puts "<b>Size:</b>     #{entry.filesize}<br>"
     puts "<b>Keywords:</b> #{entry.keywords.join(", ")}<br>"
     puts "<b>Description:</b><br>"
-    puts "<p class=\"description\">#{CGI.escapeHTML((entry.description || "")).gsub("\n", "<br>")}</p>"
+    puts "<p class=\"description\">#{make_links(CGI.escapeHTML((entry.description || "")).gsub("\n", "<br>"))}</p>"
     puts "<p>"
 #    puts "[<a href=\"show.cgi?md5=#{entry.md5}&edit\" onClick=\"toggleElementVisibility('editEntry')\">Edit this entry</a>]"
     puts "[<a href=\"javascript:toggleElementVisibility('editEntry')\">Edit this entry</a>]"
-    puts "</td>"
 
-    puts "<td>"
-    entry.relateds.each { |related|
-      rel_entry = $repository.get(related)
-      rel_entry.thumbnails.each { |thumb|
-        puts "<a href=\"../#{related}/index.html\"><img src=\"#{entry.path}/thumbnails/#{thumb}\" ></a>"
+    if not entry.next_versions.empty? then
+      puts "<b>Next Revisions:</b><br>"
+      entry.next_versions.each { |i|
+        puts "<a href=\"show.cgi?md5=#{i}\">#{i}</a><br>"
       }
-    }
+    end
+
+    if not entry.prev_versions.empty? then
+      puts "<b>Previous Revisions:</b><br>"
+      entry.prev_versions.each { |i|
+        puts "<a href=\"show.cgi?md5=#{i}\">#{i}</a><br>"
+      }
+    end
+
     puts "</td>"
     puts "</tr>"
     puts "</table>"
+
+    if not entry.relateds.empty? then
+    puts "<h3>See also:</h3>"
+      puts "<p>"
+      entry.relateds.each { |related|
+        rel_entry = $repository.get(related)
+        rel_entry.thumbnails.each { |thumb|
+          puts "<a href=\"show.cgi?md5=#{related}\"><img src=\"#{rel_entry.path}/thumbnails/#{thumb}\" ></a>"
+        }
+      }
+      puts "</p>"
+    end
     
     comments_section(entry)
 
@@ -197,6 +234,8 @@ def form_field_hidden(name, value)
   puts "<input type=\"hidden\" name=\"#{name}\" value=\"#{value}\">"
 end
 
+$other_license_tooltip = "If you need another license, then those in the list, then upload your license as a seperate entry, select 'Other' from the list and enter the md5 of your other license into the 'Other License' field."
+
 def submit_page()
   puts "<center>"
   puts "<h2>Submit Media</h2>"
@@ -207,11 +246,14 @@ def submit_page()
   puts '<TABLE border="0">'
   puts '<tr><td valign="top"><label>License:</label>'
   puts '<td><SELECT name="license">'
-  puts '<OPTION value="gpl+ccbysa">Default: GNU GPL V2.0 + CC-BY-SA-V2</OPTION>'
+  puts '<OPTION value="default">Default: GNU GPL V2.0 + CC-BY-SA-V2</OPTION>'
   puts '<OPTION value="gpl">GNU GPL V2.0 or later</OPTION>'
-  puts '<OPTION value="ccbysa" label="CC-BY-SA-V2">Creative Commons Attributions Sharealike V2.0</OPTION>'
-  puts '                    <OPTION label="publicdomain">Public Domain</OPTION>'
-  puts '</SELECT><br>'
+  puts '<OPTION value="ccbysa">Creative Commons Attributions Sharealike V2.0</OPTION>'
+  puts '<OPTION value="publicdomain">Public Domain</OPTION>'
+  puts '<OPTION value="other">Other</OPTION>'
+  puts '</SELECT>'
+  puts "<label title=\"#{$other_license_tooltip}\">Other License:</label><INPUT type=\"text\" name=\"other-license\" value=\"\">"
+  puts '<br>'
 
   form_field_text("Name",     "name",     "")
   form_field_text("Author",   "author",   "")
@@ -266,7 +308,7 @@ def edit_entry_section(entry)
   form_field_text("Name:",     "name",     entry.name)
   form_field_text("Author:",   "author",   entry.author)
   form_field_text("Filename:", "filename", entry.filename)
-
+  form_field_text("Filetype", "filetype",  entry.filetype)
   form_field_textarea("Description:", "description", entry.description)
 
   form_field_text("Keywords:",   "keywords",   entry.keywords.join(", "))
@@ -336,15 +378,7 @@ def overview_page(count, offset)
   $repository.slice(offset, count).each { |entry|
     if entry then
       puts "<td valign=\"middle\" align=\"center\"  width=\"128\" height=\"128\">"
-
-      if (entry.filetype == "directory") then
-        puts "<a href=\"show.cgi?md5=#{entry.md5}\"><img  border=\"0\" src=\"images/folder.png\"><br>#{entry.print_name}</a>"
-      elsif (entry.thumbnails.empty?) then
-        puts "<a href=\"show.cgi?md5=#{entry.md5}\"><img  border=\"0\" src=\"images/404.png\"><br>#{entry.print_name}</a>"
-      else
-        puts "<a href=\"show.cgi?md5=#{entry.md5}\"><img border=\"0\" src=\"#{entry.path}/thumbnails/#{entry.thumbnails[0]}\"></a>"
-      end
-
+      entry.render_html()
       puts "</td>"
       
       column += 1
@@ -373,10 +407,10 @@ begin
     entry_page(cgi["md5"], cgi.has_key?("edit"))
   elsif cgi.has_key?("submit") then
     submit_page()
+  elsif cgi.has_key?("offset") and cgi.has_key?("count") then
+    overview_page(cgi["count"].to_i, cgi["offset"].to_i)
   else
-    offset = if cgi.has_key?("offset") then cgi["offset"].to_i else 0 end
-    count  = if cgi.has_key?("count")  then cgi["count"].to_i  else 36 end
-    overview_page(count, offset)
+    print File.new("start.html").read()
   end
   
 rescue

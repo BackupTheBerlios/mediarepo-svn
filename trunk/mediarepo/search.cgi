@@ -41,7 +41,8 @@ begin
         if md5 and is_md5(md5) then
           entry = $repository.get(md5)
           if entry then
-            puts "#{rank}: <a href=\"show.cgi?md5=#{md5}\"><img src=\"testrepo/#{md5}/thumbnails/#{entry.thumbnails[0]}\"></a>" 
+            # entry.render_html()
+            entry.render_detail_html()
           else
             puts "Invalid entry: #{md5}<br>"
           end

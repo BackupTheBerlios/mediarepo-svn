@@ -16,7 +16,7 @@ print <<EOF
       <body>
 EOF
 
-$required_fields = ["name", "author", "filename", "description", "content", "keywords"]
+$required_fields = ["name", "author", "filename", "description", "content", "keywords", "license"]
 
 def debug_parameter(cgi)
   cgi.params.each { |key, value|
@@ -51,15 +51,31 @@ begin
     name        = cgi["name"].read
     author      = cgi["author"].read
     filename    = cgi["filename"].read
+    filetype    = cgi["filetype"].read
     description = cgi["description"].read
     keywords    = cgi["keywords"].read.gsub(",", " ").split(" ")
     content     = cgi["content"].read
+    license     = cgi["license"].read
+
+    case license
+    when "default"
+      license = "GPL + CC-by-sa"
+    when "gpl"
+      license = "94d55d512a9ba36caa9b7df079bae19f"
+    when "ccbysa" 
+      license = "http://creativecommons.org/licenses/by-sa/2.0/"
+    when "publicdomain"
+      licenses = "Public Domain"
+    else "other"
+      license = cgi["other-license"]
+    end
+      
 
     if (cgi.has_key?("md5")) then
       md5         = cgi["md5"].read
     end
     
-    if not content.empty? then
+    if not content.empty? and filename.empty? then
       filename    = cgi["content"].original_filename   
     end
 
@@ -85,12 +101,14 @@ begin
     entry.name        = name
     entry.author      = author
     entry.filename    = filename
+    entry.filetype    = filetype
     entry.description = description
     entry.keywords    = keywords
 
     outfile = entry.save()
 
-    $logger.log("'#{cgi.remote_addr}' changed entry '#{md5}' to '#{outfile}'")
+    $logger.log(cgi.remote_user, cgi.remote_ident, cgi.remote_addr, cgi.remote_host,
+                "'#{md5}' changed to '#{outfile}'")
 
     puts "commit successfull: <a href=\"show.cgi?md5=#{entry.md5}\">#{entry.md5}</a>"
   else

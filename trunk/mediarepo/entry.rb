@@ -180,7 +180,7 @@
         return "application/x-blender"
       when "ogg"
         return "application/x-ogg"
-      when "jpg"
+      when "jpg", "jpeg"
         return "image/jpeg"
       when "png"
         return "image/png"

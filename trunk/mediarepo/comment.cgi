@@ -23,6 +23,8 @@ def has_all_required_fields(cgi, fields)
 end
 
 begin
+  $logger = Logger.new("logs")
+
   required_fields = ["user", "subject", "message", "md5"]
 
   cgi = CGI.new
@@ -47,6 +49,8 @@ begin
     
     comment.save("testrepo", md5)
     
+    $logger.log("'#{cgi.remote_ident}@#{cgi.remote_addr}' added a comment to '#{md5}'")
+
     puts "<br>"
     puts "Port: #{cgi.server_port.to_s}<br>"
     puts "ServerName: #{cgi.server_name}<br>"

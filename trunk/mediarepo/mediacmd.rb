@@ -5,6 +5,7 @@ require "fileutils"
 require "set"
 require "mediarepo"
 require "stringio"
+require "commandline"
 
 include MediaRepo
 
@@ -31,7 +32,7 @@ class Renderer
       return render_blend(file)
     when "xcf"
       return render_xcf(file)
-    when "png", "jpg", "bmp", "tga"
+    when "png", "jpg", "bmp", "tga", "jpeg"
       return render_image(file)
     when "wings"
       return render_wings(file)
@@ -80,9 +81,14 @@ class Renderer
 
   def render_blend(blend)
     thumb = "/tmp/out/0001"
+    FileUtils.mkdir("/tmp/out") if not File.exists?("/tmp/out")
     system("blender", "-b", blend, "-P", "blender_thumb.py")
     system("blender", "-b", "/tmp/out/tmp.blend", "-a")
-    return [IO.popen("convert -scale '512x512' 'png:#{thumb}' 'jpg:/dev/stdout'").read()]
+    if File.exists?(thumb + ".png") then
+      return [IO.popen("convert -scale '512x512' 'png:#{thumb}.png' 'jpg:/dev/stdout'").read()]
+    else
+      return [IO.popen("convert -scale '512x512' 'png:#{thumb}' 'jpg:/dev/stdout'").read()]
+    end
   end
 end
 
@@ -164,7 +170,7 @@ def gen_thumbnail_cmd(*args)
     if (not entry) then
       puts "Error: #{md5} not in database"
     else
-      puts "Md5: #{md5} => #{entry.md5}"
+      #puts "Md5: #{md5} => #{entry.md5}"
       
       if (entry.renders.empty?) then
         puts "Generating render for: %s\n" % [entry.md5]
@@ -173,7 +179,7 @@ def gen_thumbnail_cmd(*args)
       
       entry.renders.each { |render|
         if File.exist?(entry.path + "/thumbnails/" + render + ".jpg") then
-          puts "Have thumbnail for: #{render}"
+          # puts "Have thumbnail for: #{render}"
         else
           command = "convert -sample '128x128' '%s/renders/%s' 'jpg:/dev/stdout'" % [entry.path, render]
           output = IO.popen(command).read()
@@ -188,8 +194,59 @@ def gen_thumbnail_cmd(*args)
 end
 
 def add_cmd(*args)
+  parser = CommandLine::Parser.new()
+  parser.add_option(nil, "--cut-path",    "PATH", "Remove the given regex from the pathname entry")
+  parser.add_option(nil, "--author",      "AUTHOR", "Set author to AUTHOR")
+  parser.add_option(nil, "--name",        "NAME",   "Set name to NAME")
+  parser.add_option(nil, "--license",     "LICENSE",   "Set license to LICENSE")
+  parser.add_option(nil, "--keywords",    "KEYWORDS",   "Set keywords to KEYWORDS")
+  parser.add_option(nil, "--description", "DESC",   "Set description to DESC")
+  parser.add_option(nil, "--description-from-file", "FILE",   "Set description to the content of FILE")
+  parser.add_option(nil, "--relateds", "MD5",   "Add a related entries to this file")
+  parser.add_option(nil, "--group", nil, "Groups all entries")
+  parser.add_option("-h", "--help", nil,   "Print this help")
+  options, rest = parser.parse_args(args)
+
+  author      = nil
+  license     = nil
+  description = nil
+  name        = nil
+  keywords    = nil
+  cut_path    = nil
+  relateds    = nil
+  group       = false
+
+  options.each { |option, argument|
+    case option 
+    when "--cut-path"
+      cut_path = Regexp.new(argument)
+    when "--author"
+      author = argument
+    when "--group"
+      group = true
+    when "--license"
+      license = argument
+    when "--keywords"
+      keywords = argument.read.gsub(",", " ").split(" ")
+    when "--name"
+      name = argument
+    when "--description"
+      description = argument
+    when "--description-from-file"
+      description = File.new(argument, "r").read()
+    when "--relateds"
+      relateds = argument.split
+    else
+      puts "Usage: mediacmd add [OPTIONS] [FILES]"
+      puts ""
+      parser.print_help()
+      puts ""
+      return nil
+    end
+  }
+
   recursive = true
-  args.each { |filename|
+  rest.each { |filename|
     print "Adding '%s'... " % [filename]
     if File.directory?(filename) then
       if recursive then
@@ -207,12 +264,24 @@ def add_cmd(*args)
         puts "error, '%s' is a directory" % filename
       end
     else
-      entry = $repository.create_entry_from_file(filename)
-      #entry.author = "unknown"
-      #entry.license = "Public Domain"
-      #entry.description = "Sound were downloaded from http://www.planit3d.com/source/sound_files/sounds.htm with the following text attached: \n" \
-      #+ ">>These sound effects are sourced from around the web and are not owned by PlanIT 3D. The sounds listed in this section reside on multimedia public domain servers from around the web. The sound files on these servers must be in public domain to be uploaded. PlanIT 3D cannot grant permission to use any of the sounds on this page for any use other than personal, and cannot be responsible for the validation of the sounds origins.<<\n"
-      # entry.save()
+      entry = $repository.create_entry_from_file(filename, true)
+      if cut_path then
+        entry.pathname    = filename.sub(cut_path, "")
+      else
+        entry.pathname    = filename
+      end
+      entry.author      = author if author
+      entry.name        = name if name
+      entry.license     = license if license
+      entry.description = description if description
+      entry.relateds    += relateds if relateds
+
+      if group then
+        entry.relateds += rest.map { |i| filename2md5(i) }
+      end
+      
+      entry.save()
+
       print "done => %s\n" % [entry.md5]
     end
   }
@@ -241,6 +310,15 @@ def check_cmd(*rest)
       print "Error: entry '%s' doesn't validate" % i
       errors += 1
     end
+
+    # Checks to add:
+    # ==============
+    # - check for 'relateds' to itself
+    # - check for duplicate thumbnails
+    # - check for empty thumbnails
+    # - check for non-backlinking relateds
+    # - check for non-backlinking versions
+    # - check for non-hidden renders
   }
   puts "Validation done, %s errors" % errors
 end
@@ -273,6 +351,25 @@ def search_cmd(prop, *regexs)
   }
 end
 
+def has_cmd(*rest)
+  rest = rest.map { |i|
+    if File.exist?(i) then   
+      Digest::MD5.hexdigest(File.new(i).read())
+    else
+      i
+    end
+  }
+
+  rest.each { |i| 
+    e = $repository.get(i)
+    if e then
+      puts "#{i} ok"
+    else
+      puts "#{i} missing"
+    end
+  }
+end
+
 def add_directory_cmd(name, *rest)
   rest = rest.map { |i|
     if File.exist?(i) then   
@@ -290,25 +387,6 @@ def add_directory_cmd(name, *rest)
   entry.filename = name
   entry.save()
   puts "Added directory: #{entry.md5}"
-end
-
-def make_related_cmd(*args_unknown)
-  args = args_unknown.map { |i|
-    if File.exist?(i) then   
-      Digest::MD5.hexdigest(File.new(i).read())
-    else
-      i
-    end
-  }
-  
-  puts "Related: #{args.join(", ")}"
-
-  args.each { |md5|
-    entry = $repository.get(md5)
-    args.each { |md5|
-      entry.related_add(md5) 
-    }
-  }
 end
 
 def clean_cmd(*args)
@@ -409,6 +487,8 @@ else
     add_cmd(*rest)
   when "get"
     get_cmd(*rest)
+  when "has"
+    has_cmd(*rest)
   when "check"
     check_cmd(*rest)
   when "list"

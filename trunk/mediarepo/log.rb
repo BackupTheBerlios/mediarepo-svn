@@ -3,6 +3,8 @@ require "digest/md5"
 module MediaRepo
   class LogEntry
     attr_accessor :ctime, :message
+    # Who and on what host commited the stuff?
+    attr_accessor :ident, :host
     
     def initialize(filename = nil)
       @ctime   = 0
@@ -34,15 +36,22 @@ module MediaRepo
     end
   end
 
+  class ModificationLogEntry
+  end
+
+  class AddLogEntry
+    
+  end
+
   class Logger
     def initialize(path)
       @path = path
     end
 
-    def log(msg)
+    def log(user, ident, addr, host, msg)
       entry = LogEntry.new()
       entry.ctime   = Time.now().to_i
-      entry.message = msg
+      entry.message = "User: #{user}\nIdent: #{ident}\nAddr: #{addr}\nHost: #{host}\n#{msg}"
       entry.save(@path + "/" + Digest::MD5.hexdigest(entry.ctime.to_s + entry.message) + ".xml")
     end
   end

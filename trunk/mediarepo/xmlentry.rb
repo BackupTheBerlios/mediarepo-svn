@@ -1,5 +1,6 @@
 require "rexml/document"
 require "rexml/streamlistener"
+require "stringio"
 
 module MediaRepo
 
@@ -15,7 +16,7 @@ module MediaRepo
       #puts "tag_start: #{name} #{attrs}"
       @text = ""
     end
-    
+
     def tag_end(name)
       # puts "#{name} => #{@text}"
       case name
@@ -39,10 +40,16 @@ module MediaRepo
         @entry.filetype = @text
       when "filename"
         @entry.filename = @text
+      when "pathname"
+        @entry.pathname = @text
       when "keyword"
         @entry.keywords.push(@text)
       when "category"
         @entry.categories.push(@text)
+      when "next-version"
+        @entry.next_versions.push(@text)
+      when "prev-version"
+        @entry.prev_versions.push(@text)
       when "parent"
         @entry.parents.push(@text)
       when "related"
@@ -64,7 +71,8 @@ module MediaRepo
     attr_reader(:path)
     attr_accessor(:version, :ctime, :md5, :filesize,
                   :name, :description, :keywords, :categories,
-                  :author, :license, :filetype, :filename, 
+                  :author, :license, :filetype, :filename, :pathname,
+                  :next_versions, :prev_versions,
                   :relateds, :parents)
 
     def XMLEntry.create_from_file(repopath, filename, nosave = false)
@@ -130,16 +138,23 @@ module MediaRepo
       end
     end
 
+    def diff()
+      
+    end   
+
     def init_defaults()
       @version     = 1
       @ctime       = 0
       @md5         = ""
       @filesize    = 0
+      @next_versions = []
+      @prev_versions = []
       @name        = "" # Human readable name of the object
       @description = "" # Human readable description of the object
       @author      = ""
       @license     = ""
       @filename    = ""
+      @pathname    = ""
       @filetype    = ""
       @keywords    = [] # free-form keywords that can be used to search 
       @categories  = [] 
@@ -400,12 +415,22 @@ end
       entry.add_element("ctime").text       = @ctime.to_s
       entry.add_element("md5").text         = @md5
       entry.add_element("filesize").text    = @filesize.to_s
+      entry.add_element("license").text     = @license
       entry.add_element("name").text        = @name
       entry.add_element("description").text = @description
       entry.add_element("author").text      = @author
+      entry.add_element("pathname").text    = @pathname
       entry.add_element("filename").text    = @filename
       entry.add_element("filetype").text    = @filetype
     
+      prev_versions.each { |i|
+        entry.add_element("prev-version").text = i
+      }
+
+      next_versions.each { |i|
+        entry.add_element("next-version").text = i
+      }
+      
       keywords = entry.add_element("keywords")
       @keywords.each { |keyword|
         keywords.add_element("keyword").text = keyword
@@ -486,17 +511,75 @@ end
         return "application/x-blender"
       when "ogg"
         return "application/x-ogg"
-      when "jpg"
+      when "jpg", "jpeg"
         return "image/jpeg"
       when "png"
         return "image/png"
+      when "xml"
+        return "text/xml"
+      when "html"
+        return "text/html"
+      when "wav"
+        return "audio/x-wav"
+      when "txt"
+        return "text/plain"
       when "xcf"
         return "application/x-gimp-image"
+      when "svg"
+        return "image/svg+xml"
       else
         return "application/octet-stream"
       end
     end
+
+    def render_html()
+      puts "<div align=\"center\">"
+      if (self.filetype == "directory") then
+        puts "<a href=\"show.cgi?md5=#{self.md5}\"><img  border=\"0\" src=\"images/folder.png\"><br>#{self.print_name}</a>"
+      elsif (self.thumbnails.empty?) then
+        icon = "images/mimetypes/gnome-mime-#{self.mime_type.gsub("/", "-")}.png"
+        if not File.exists?(icon) then
+          icon = "images/404.png"
+        end
+        puts "<a href=\"show.cgi?md5=#{self.md5}\"><img  border=\"0\" src=\"#{icon}\"><br>#{self.print_name}</a>"
+        
+      else
+        puts "<a href=\"show.cgi?md5=#{self.md5}\"><img border=\"0\" src=\"#{self.path}/thumbnails/#{self.thumbnails[0]}\"></a>"
+      end
+      puts "</div>"
+    end
+
+    def render_detail_html()
+      puts "<table><tr>"
+      puts "<td width=\"128\" height=\"128\" valign=\"top\">"
+      render_html()
+      puts "</td>"
+      
+      puts "<td>"
+      puts "<h3>#{self.print_name}</h3>"  
+      puts "<b>Filename:</b> <a href=\"download.cgi?md5=#{md5}\">#{self.filename}</a><br>"
+      puts "<b>Pathname:</b> #{File.dirname(self.pathname)}<br>"
+      puts "<b>MD5:</b>      #{self.md5}<br>"
+      if is_md5(self.license) and (el = $repository.get(self.license)) then
+        puts "<b>License:</b>  <a href=\"show.cgi?md5=#{self.license}\">see #{el.name}</a><br>"
+      else
+        puts "<b>License:</b>  #{self.license}<br>"
+      end
+      puts "<b>Type:</b>     #{self.filetype}<br>"
+      
+      if is_md5(self.author) and (el = $repository.get(self.author)) then
+        puts "<b>License:</b>  <a href=\"show.cgi?md5=#{self.author}\">see #{el.name}</a><br>"
+      else
+        puts "<b>Author:</b>   #{CGI.escapeHTML(self.author)}<br>"
+      end
+      
+      puts "<b>Creation:</b> #{Time.at(self.ctime).to_s}<br>"
+      puts "<b>Size:</b>     #{self.filesize}<br>"
+      puts "</td>"
+      puts "</tr></table>"
+    end
   end
 end
+
 
 # EOF #
