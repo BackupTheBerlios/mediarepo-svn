@@ -42,6 +42,7 @@ def has_required_fields(cgi)
 end
 
 begin
+  $logger = Logger.new("logs")
   cgi = CGI.new
 
   #debug_parameter(cgi)
@@ -87,7 +88,9 @@ begin
     entry.description = description
     entry.keywords    = keywords
 
-    entry.save()
+    outfile = entry.save()
+
+    $logger.log("'#{cgi.remote_addr}' changed entry '#{md5}' to '#{outfile}'")
 
     puts "commit successfull: <a href=\"show.cgi?md5=#{entry.md5}\">#{entry.md5}</a>"
   else

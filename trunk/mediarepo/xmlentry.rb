@@ -67,13 +67,15 @@ module MediaRepo
                   :author, :license, :filetype, :filename, 
                   :relateds, :parents)
 
-    def XMLEntry.create_from_file(repopath, filename)
+    def XMLEntry.create_from_file(repopath, filename, nosave = false)
       entry = XMLEntry.create_from_data(repopath, File.new(filename).read(), true)
 
       # Write type
       entry.filename = File.basename(filename)
       entry.filetype = File.extname(filename).gsub(".", "")
-      entry.save()
+      if not nosave then
+        entry.save()
+      end
 
       return entry
     end

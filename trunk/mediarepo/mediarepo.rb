@@ -2,6 +2,7 @@ require "digest/md5"
 require "fileutils"
 require "set"
 require "xmlentry.rb"
+require "log.rb"
 require "xmlcomment.rb"
 
 module MediaRepo
@@ -114,8 +115,8 @@ module MediaRepo
       return XMLEntry.create_from_data(@path, data, nosave)
     end
 
-    def create_entry_from_file(filename)
-      return XMLEntry.create_from_file(@path, filename)
+    def create_entry_from_file(filename, nosave = false)
+      return XMLEntry.create_from_file(@path, filename, nosave)
     end
   end
 end
